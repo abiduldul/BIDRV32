@@ -38,26 +38,9 @@ always_comb begin
     endcase
 end
 
-// Register file
-logic we;
-logic [31:0] wd, rd1, rd2;
-
-logic [31:0] regs [0:31];
-always_ff @(posedge clk or negedge rstn) begin
-    if (!rstn) begin
-        for (int i =0; i<32; i++)
-            regs[i] <= 32'b0;
-    end 
-    else if (we && (rd != 0)) begin
-        regs[rd] <= wd;
-    end
-end
-
-assign rd1 = (rs1 == 0) ? 32'b0 : regs[rs1];
-assign rd2 = (rs2 == 0) ? 32'b0 : regs[rs2];
-
 // Control Unit
-logic we, alu_src, mem_read, mem_write, mem_to_reg;
+logic we;
+logic alu_src, mem_read, mem_write, mem_to_reg;
 logic [3:0] alu_op;
 
 always_comb begin
@@ -85,7 +68,7 @@ always_comb begin
                 default: alu_op = 4'b0000;
             endcase
         end
-        7'b0010011: begin  // I-type
+        7'b0010011: begin  // I-type (Immediate-type)
             we      = 1;
             alu_src = 1;
             alu_op  = 4'b0000;
@@ -97,34 +80,52 @@ always_comb begin
             alu_op  = 4'b0000;
             mem_to_reg = 1;
         end
-        7'b0100011: begin  // Store
+        7'b0100011: begin  // S-type (Store) 
             alu_src   = 1;
             mem_write = 1;
             alu_op  = 4'b0000;
         end
-        7'b1100011: begin  // Branch
+        7'b1100011: begin  // B-type (Branch)
             alu_op  = 4'b0001;
         end
+        //later will add U (Upper-immediate) and J (Jump) type
     endcase
 end
+
+// Register file
+logic [31:0] wd, rdata1, rdata2;
+
+logic [31:0] regs [0:31];
+always_ff @(posedge clk or negedge rstn) begin
+    if (!rstn) begin
+        for (int i =0; i<32; i++)
+            regs[i] <= 32'b0;
+    end 
+    else if (we && (rd != 0)) begin
+        regs[rd] <= wd;
+    end
+end
+
+assign rdata1 = (rs1 == 0) ? 32'b0 : regs[rs1];
+assign rdata2 = (rs2 == 0) ? 32'b0 : regs[rs2];
 
 // ALU
 logic [31:0] alu_input_b, alu_result;
 logic alu_out_zero;
 
-assign alu_input_b = (alu_src == 0) ? rd2 : imm;
+assign alu_input_b = (alu_src == 0) ? rdata2 : imm;
 
 always_comb begin
     case (alu_op)
-        4'b0000: alu_result = rd1 + alu_input_b;           // ADD
-        4'b0001: alu_result = rd1 - alu_input_b;           // SUB
-        4'b0010: alu_result = rd1 & alu_input_b;           // AND
-        4'b0011: alu_result = rd1 | alu_input_b;           // OR
-        4'b0100: alu_result = rd1 ^ alu_input_b;           // XOR
-        4'b0101: alu_result = rd1 << alu_input_b[4:0];     // SLL
-        4'b0110: alu_result = rd1 >> alu_input_b[4:0];     // SRL
-        4'b0111: alu_result = $signed(rd1) >>> alu_input_b[4:0]; // SRA
-        4'b1000: alu_result = ($signed(rd1) < $signed(alu_input_b)) ? 32'd1 : 32'd0; // SLT
+        4'b0000: alu_result = rdata1 + alu_input_b;           // ADD
+        4'b0001: alu_result = rdata1 - alu_input_b;           // SUB
+        4'b0010: alu_result = rdata1 & alu_input_b;           // AND
+        4'b0011: alu_result = rdata1 | alu_input_b;           // OR
+        4'b0100: alu_result = rdata1 ^ alu_input_b;           // XOR
+        4'b0101: alu_result = rdata1 << alu_input_b[4:0];     // SLL
+        4'b0110: alu_result = rdata1 >> alu_input_b[4:0];     // SRL
+        4'b0111: alu_result = $signed(rdata1) >>> alu_input_b[4:0]; // SRA
+        4'b1000: alu_result = ($signed(rdata1) < $signed(alu_input_b)) ? 32'd1 : 32'd0; // SLT
         default: alu_result = 32'b0;
     endcase
 end
@@ -135,5 +136,12 @@ logic [31:0] mem_rdata;
 assign wd = (mem_to_reg == 0) ? alu_result : mem_rdata;
 
 //DMEM
+logic [31:0] dmem [0:1023];   // 1024 words = 4 KB
 
+always_ff @(posedge clk) begin
+    if (mem_write)
+        dmem[alu_result[11:2]] <= rdata2;
+end
+
+assign mem_rdata = (mem_read) ? dmem[alu_result[11:2]] : 32'b0;
 endmodule
