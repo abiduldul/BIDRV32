@@ -1,3 +1,5 @@
+`timescale 1ns/1ps
+
 module bidrv32 (
     input logic clk,
     input logic rstn,
@@ -24,8 +26,8 @@ assign rs1 = instr[19:15];
 assign rs2 = instr[24:20];
 assign funct7 = instr[31:25];
 
+// immediate generator
 logic [31:0] imm;
-
 always_comb begin
     case (opcode)
         7'b0010011: imm = {{20{instr[31]}}, instr[31:20]};  // I-type
